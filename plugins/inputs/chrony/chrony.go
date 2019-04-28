@@ -19,6 +19,8 @@ var (
 
 type Chrony struct {
 	DNSLookup bool `toml:"dns_lookup"`
+	UseSudo	  bool `toml:"use_sudo"`
+	Commands  []string
 	path      string
 }
 
@@ -30,6 +32,8 @@ func (*Chrony) SampleConfig() string {
 	return `
   ## If true, chronyc tries to perform a DNS lookup for the time server.
   # dns_lookup = false
+  # use_sudo = false
+  # commands = ["tracking", "serverstats"]
   `
 }
 
@@ -42,9 +46,20 @@ func (c *Chrony) Gather(acc telegraf.Accumulator) error {
 	if !c.DNSLookup {
 		flags = append(flags, "-n")
 	}
-	flags = append(flags, "tracking")
 
-	cmd := execCommand(c.path, flags...)
+	if !c.Commands {
+		flags = append(flags, "tracking")
+	}
+	
+	name := c.path
+	var arg []string
+
+	if c.UseSudo {
+		name = "sudo"
+		arg = append(arg, c.path)
+	}
+
+	cmd := execCommand(name, arg, flags...)
 	out, err := internal.CombinedOutputTimeout(cmd, time.Second*5)
 	if err != nil {
 		return fmt.Errorf("failed to run command %s: %s - %s", strings.Join(cmd.Args, " "), err, string(out))
